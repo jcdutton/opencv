@@ -40,6 +40,7 @@
 //
 //M*/
 
+#include <iostream>
 #include "cap_ffmpeg_legacy_api.hpp"
 
 using namespace cv;
@@ -508,6 +509,7 @@ struct CvCapture_FFMPEG
     AVFrame         * picture;
     AVFrame           rgb_picture;
     int64_t           picture_pts;
+    int               frame_format;
 
     AVPacket          packet;
     Image_FFMPEG      frame;
@@ -562,6 +564,7 @@ void CvCapture_FFMPEG::init()
     avcodec = 0;
     frame_number = 0;
     eps_zero = 0.000025;
+    frame_format = 0;
 
 #if LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(52, 111, 0)
     dict = NULL;
@@ -1276,33 +1279,69 @@ bool CvCapture_FFMPEG::retrieveFrame(int, unsigned char** data, int* step, int* 
     {
         // Some sws_scale optimizations have some assumptions about alignment of data/step/width/height
         // Also we use coded_width/height to workaround problem with legacy ffmpeg versions (like n0.8)
-        int buffer_width = video_st->codec->coded_width, buffer_height = video_st->codec->coded_height;
+        int buffer_width, buffer_height;
 
-        img_convert_ctx = sws_getCachedContext(
-                img_convert_ctx,
-                buffer_width, buffer_height,
-                video_st->codec->pix_fmt,
-                buffer_width, buffer_height,
-                AV_PIX_FMT_BGR24,
-                SWS_BICUBIC,
-                NULL, NULL, NULL
-                );
+        if (frame_format == 2) {
+            buffer_width = video_st->codec->coded_width;
+	    buffer_height = video_st->codec->coded_height * 3 / 2;
+	    //std::cout << "src pix_fmt:" << video_st->codec->pix_fmt << "\n";
+	    //std::cout << "f_width:" << frame.width << " f_height:" << frame.height << "\n";
+	    //std::cout << "c_width:" << video_st->codec->width << " c_height:" << video_st->codec->height << "\n";
+            img_convert_ctx = sws_getCachedContext(
+                    img_convert_ctx,
+                    buffer_width, buffer_height,
+                    video_st->codec->pix_fmt,
+                    buffer_width, buffer_height,
+                    AV_PIX_FMT_YUV420P,
+                    SWS_BICUBIC,
+                    NULL, NULL, NULL
+                    );
+	} else {
+            buffer_width = video_st->codec->coded_width;
+	    buffer_height = video_st->codec->coded_height;
+            img_convert_ctx = sws_getCachedContext(
+                    img_convert_ctx,
+                    buffer_width, buffer_height,
+                    video_st->codec->pix_fmt,
+                    buffer_width, buffer_height,
+                    AV_PIX_FMT_BGR24,
+                    SWS_BICUBIC,
+                    NULL, NULL, NULL
+                    );
+	}
 
         if (img_convert_ctx == NULL)
             return false;//CV_Error(0, "Cannot initialize the conversion context!");
 
 #if USE_AV_FRAME_GET_BUFFER
-        av_frame_unref(&rgb_picture);
-        rgb_picture.format = AV_PIX_FMT_BGR24;
-        rgb_picture.width = buffer_width;
-        rgb_picture.height = buffer_height;
-        if (0 != av_frame_get_buffer(&rgb_picture, 32))
-        {
-            CV_WARN("OutOfMemory");
-            return false;
-        }
+        if (frame_format == 2) {
+	    //std::cout << "USE_AV_FRAME_GET_BUFFER: format:" << AV_PIX_FMT_YUV420P << "\n";
+            av_frame_unref(&rgb_picture);
+            rgb_picture.format = AV_PIX_FMT_YUV420P;
+            rgb_picture.width = buffer_width;
+            rgb_picture.height = buffer_height;
+	    //std::cout << "format:" << rgb_picture.format << " width:" << rgb_picture.width << " hight:" << rgb_picture.height << "\n";
+            if (0 != av_frame_get_buffer(&rgb_picture, 32))
+            {
+                CV_WARN("OutOfMemory");
+                return false;
+            }
+	} else {
+            av_frame_unref(&rgb_picture);
+            rgb_picture.format = AV_PIX_FMT_BGR24;
+            rgb_picture.width = buffer_width;
+            rgb_picture.height = buffer_height;
+            if (0 != av_frame_get_buffer(&rgb_picture, 32))
+            {
+                CV_WARN("OutOfMemory");
+                return false;
+            }
+	}
 #else
         int aligns[AV_NUM_DATA_POINTERS];
+        if (frame_format == 2) {
+	    std::cout << "ELSE USE_AV_FRAME_GET_BUFFER\n";
+	}
         avcodec_align_dimensions2(video_st->codec, &buffer_width, &buffer_height, aligns);
         rgb_picture.data[0] = (uint8_t*)realloc(rgb_picture.data[0],
                 _opencv_ffmpeg_av_image_get_buffer_size( AV_PIX_FMT_BGR24,
@@ -1310,14 +1349,69 @@ bool CvCapture_FFMPEG::retrieveFrame(int, unsigned char** data, int* step, int* 
         _opencv_ffmpeg_av_image_fill_arrays(&rgb_picture, rgb_picture.data[0],
                         AV_PIX_FMT_BGR24, buffer_width, buffer_height );
 #endif
-        frame.width = video_st->codec->width;
-        frame.height = video_st->codec->height;
-        frame.cn = 3;
-        frame.data = rgb_picture.data[0];
-        frame.step = rgb_picture.linesize[0];
+        if (frame_format == 2) {
+		//std::cout << "c_width:" << video_st->codec->width << " c_height:" << video_st->codec->height << "\n";
+                frame.width = video_st->codec->width;
+                frame.height = video_st->codec->height * 3 / 2;
+                frame.cn = 1;
+                frame.data = rgb_picture.data[0];
+                frame.step = rgb_picture.linesize[0];
+		//for (int n = 0; n < 8; n++) {
+		//	if (rgb_picture.data[n]) {
+		//		std::cout << n << ":" << static_cast<void*>(rgb_picture.data[n]) << ":" << rgb_picture.linesize[n] << "\n";
+		//	}
+		//}
+#if 0
+		Mat oMatA;
+oMatA = Mat::zeros( pstCurFfmsFrame->EncodedHeight, pstCurFfmsFrame->EncodedWidth, CV_8UC3 );
+int nDi = 0;
+for( int nRi = 0; nRi < oMatA.rows; nRi++ )
+{
+    for( int nCi = 0; nCi < oMatA.cols; nCi++ )
+    {
+       oMatA.data[oMatA.step[0] * nRi + oMatA.step[1] * nCi + 0] = pstCurFfmsFrame->Data[0][nDi++]; // B
+       oMatA.data[oMatA.step[0] * nRi + oMatA.step[1] * nCi + 1] = pstCurFfmsFrame->Data[0][nDi++]; // G
+       oMatA.data[oMatA.step[0] * nRi + oMatA.step[1] * nCi + 2] = pstCurFfmsFrame->Data[0][nDi++]; // R
+       nDi++;
+    }
+}
+#endif
+	} else {
+            frame.width = video_st->codec->width;
+            frame.height = video_st->codec->height;
+            frame.cn = 3;
+            frame.data = rgb_picture.data[0];
+            frame.step = rgb_picture.linesize[0];
+	}
     }
 
-    sws_scale(
+    if (frame_format == 2) {
+        sws_scale(
+            img_convert_ctx,
+            picture->data,
+            picture->linesize,
+            0, video_st->codec->coded_height,
+            rgb_picture.data,
+            rgb_picture.linesize
+        );
+//	memset(rgb_picture.data[0], 255, 500);
+//	memset(rgb_picture.data[0] + frame.width, 255, 500);
+//	memset(rgb_picture.data[0] + frame.width*2, 255, 500);
+        //memcpy(
+        //    &(rgb_picture.data[0]),
+        //    &(picture->data),
+        //    picture->linesize[0] * video_st->codec->height);
+        memcpy(
+            rgb_picture.data[0] + (rgb_picture.linesize[0] * video_st->codec->height),
+            rgb_picture.data[1],
+            rgb_picture.linesize[1] * video_st->codec->height / 2);
+        memcpy(
+            rgb_picture.data[0] + (rgb_picture.linesize[0] * video_st->codec->height) + (rgb_picture.linesize[1] * (video_st->codec->height / 2)),
+            rgb_picture.data[2],
+            rgb_picture.linesize[2] * (video_st->codec->height / 2));
+            //picture->linesize = rgb_picture.linesize[0];
+    } else {
+        sws_scale(
             img_convert_ctx,
             picture->data,
             picture->linesize,
@@ -1325,12 +1419,13 @@ bool CvCapture_FFMPEG::retrieveFrame(int, unsigned char** data, int* step, int* 
             rgb_picture.data,
             rgb_picture.linesize
             );
-
+    }
     *data = frame.data;
     *step = frame.step;
     *width = frame.width;
     *height = frame.height;
     *cn = frame.cn;
+    //std::cout << "final:c_width:" << *width << " c_height:" << *height << " cn:" << *cn << "\n";
 
     return true;
 }
@@ -1547,8 +1642,13 @@ bool CvCapture_FFMPEG::setProperty( int property_id, double value )
 {
     if( !video_st ) return false;
 
+    std::cout << "FFMPEG::setProperty " << property_id << " value:" << value << "\n";
     switch( property_id )
     {
+    case CAP_PROP_FRAME_FORMAT:
+        std::cout << "Frame Format set to " << value << "\n";
+        frame_format = value;
+        break;
     case CAP_PROP_POS_MSEC:
     case CAP_PROP_POS_FRAMES:
     case CAP_PROP_POS_AVI_RATIO:

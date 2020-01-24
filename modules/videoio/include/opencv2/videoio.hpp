@@ -176,6 +176,7 @@ enum VideoCaptureProperties {
        CAP_PROP_AUTO_WB       =44, //!< enable/ disable auto white-balance
        CAP_PROP_WB_TEMPERATURE=45, //!< white-balance color temperature
        CAP_PROP_CODEC_PIXEL_FORMAT =46,    //!< (read-only) codec's pixel format. 4-character code - see VideoWriter::fourcc . Subset of [AV_PIX_FMT_*](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/raw.c) or -1 if unknown
+       CAP_PROP_FRAME_FORMAT  =47, //!< Frame format
 #ifndef CV_DOXYGEN
        CV__CAP_PROP_LATEST
 #endif
