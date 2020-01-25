@@ -50,6 +50,7 @@
 #include "cap_ffmpeg_impl.hpp"
 
 #define icvCreateFileCapture_FFMPEG_p cvCreateFileCapture_FFMPEG
+#define icvCreateBufferCapture_FFMPEG_p cvCreateBufferCapture_FFMPEG
 #define icvReleaseCapture_FFMPEG_p cvReleaseCapture_FFMPEG
 #define icvGrabFrame_FFMPEG_p cvGrabFrame_FFMPEG
 #define icvRetrieveFrame_FFMPEG_p cvRetrieveFrame_FFMPEG
@@ -68,6 +69,7 @@ class CvCapture_FFMPEG_proxy CV_FINAL : public cv::IVideoCapture
 public:
     CvCapture_FFMPEG_proxy() { ffmpegCapture = 0; }
     CvCapture_FFMPEG_proxy(const cv::String& filename) { ffmpegCapture = 0; open(filename); }
+    CvCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen) { ffmpegCapture = 0; open(pBuffer, bufLen); }
     virtual ~CvCapture_FFMPEG_proxy() { close(); }
 
     virtual double getProperty(int propId) const CV_OVERRIDE
@@ -100,6 +102,13 @@ public:
         ffmpegCapture = icvCreateFileCapture_FFMPEG_p( filename.c_str() );
         return ffmpegCapture != 0;
     }
+    virtual bool open( unsigned char* pBuffer, unsigned long bufLen )
+    {
+        close();
+
+        ffmpegCapture = icvCreateBufferCapture_FFMPEG_p( pBuffer, bufLen );
+        return ffmpegCapture != 0;
+    }
     virtual void close()
     {
         if (ffmpegCapture)
@@ -124,6 +133,16 @@ cv::Ptr<cv::IVideoCapture> cvCreateFileCapture_FFMPEG_proxy(const std::string &f
         return capture;
     return cv::Ptr<cv::IVideoCapture>();
 }
+
+cv::Ptr<cv::IVideoCapture> cvCreateBufferCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen)
+{
+    CV_LOG_DEBUG(NULL, "cvCreateBufferCapture_FFMPEG_proxy called");
+    cv::Ptr<CvCapture_FFMPEG_proxy> capture = cv::makePtr<CvCapture_FFMPEG_proxy>(pBuffer, bufLen);
+    if (capture && capture->isOpened())
+        return capture;
+    return cv::Ptr<cv::IVideoCapture>();
+}
+
 
 namespace {
 

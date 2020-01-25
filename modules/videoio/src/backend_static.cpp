@@ -12,11 +12,12 @@ class StaticBackend: public IBackend
 {
 public:
     FN_createCaptureFile fn_createCaptureFile_;
+    FN_createCaptureBuffer fn_createCaptureBuffer_;
     FN_createCaptureCamera fn_createCaptureCamera_;
     FN_createWriter fn_createWriter_;
 
-    StaticBackend(FN_createCaptureFile fn_createCaptureFile, FN_createCaptureCamera fn_createCaptureCamera, FN_createWriter fn_createWriter)
-        : fn_createCaptureFile_(fn_createCaptureFile), fn_createCaptureCamera_(fn_createCaptureCamera), fn_createWriter_(fn_createWriter)
+    StaticBackend(FN_createCaptureFile fn_createCaptureFile, FN_createCaptureBuffer fn_createCaptureBuffer, FN_createCaptureCamera fn_createCaptureCamera, FN_createWriter fn_createWriter)
+        : fn_createCaptureFile_(fn_createCaptureFile), fn_createCaptureBuffer_(fn_createCaptureBuffer), fn_createCaptureCamera_(fn_createCaptureCamera), fn_createWriter_(fn_createWriter)
     {
         // nothing
     }
@@ -34,6 +35,18 @@ public:
             return fn_createCaptureFile_(filename);
         return Ptr<IVideoCapture>();
     }
+#if 1
+    Ptr<IVideoCapture> createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen) const CV_OVERRIDE
+    {
+	CV_LOG_DEBUG(NULL, "StaticBackend:createCaptureBuffer called");
+	if (fn_createCaptureBuffer_) {
+            return fn_createCaptureBuffer_(pBuffer, bufLen);
+	} else {
+		CV_LOG_DEBUG(NULL, "StaticBackend:createCaptureBuffer fn_createCaptureBuffer_ is NULL");
+	}
+        return Ptr<IVideoCapture>();
+    }
+#endif
     Ptr<IVideoWriter> createWriter(const std::string &filename, int fourcc, double fps, const cv::Size &sz, bool isColor) const CV_OVERRIDE
     {
         if (fn_createWriter_)
@@ -48,8 +61,8 @@ protected:
     Ptr<StaticBackend> backend;
 
 public:
-    StaticBackendFactory(FN_createCaptureFile createCaptureFile, FN_createCaptureCamera createCaptureCamera, FN_createWriter createWriter)
-        : backend(makePtr<StaticBackend>(createCaptureFile, createCaptureCamera, createWriter))
+    StaticBackendFactory(FN_createCaptureFile createCaptureFile, FN_createCaptureBuffer createCaptureBuffer, FN_createCaptureCamera createCaptureCamera, FN_createWriter createWriter)
+        : backend(makePtr<StaticBackend>(createCaptureFile, createCaptureBuffer, createCaptureCamera, createWriter))
     {
         // nothing
     }
@@ -63,10 +76,11 @@ public:
 };
 
 Ptr<IBackendFactory> createBackendFactory(FN_createCaptureFile createCaptureFile,
+                                          FN_createCaptureBuffer createCaptureBuffer,
                                           FN_createCaptureCamera createCaptureCamera,
                                           FN_createWriter createWriter)
 {
-    return makePtr<StaticBackendFactory>(createCaptureFile, createCaptureCamera, createWriter).staticCast<IBackendFactory>();
+    return makePtr<StaticBackendFactory>(createCaptureFile, createCaptureBuffer, createCaptureCamera, createWriter).staticCast<IBackendFactory>();
 }
 
 } // namespace

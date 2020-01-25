@@ -168,6 +168,7 @@ public:
 //==================================================================================================
 
 Ptr<IVideoCapture> cvCreateFileCapture_FFMPEG_proxy(const std::string &filename);
+Ptr<IVideoCapture> cvCreateBufferCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen);
 Ptr<IVideoWriter> cvCreateVideoWriter_FFMPEG_proxy(const std::string& filename, int fourcc, double fps, const Size &frameSize, bool isColor);
 
 Ptr<IVideoCapture> createGStreamerCapture_file(const std::string& filename);

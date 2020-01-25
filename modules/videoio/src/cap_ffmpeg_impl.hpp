@@ -479,7 +479,8 @@ static AVRational _opencv_ffmpeg_get_sample_aspect_ratio(AVStream *stream)
 
 struct CvCapture_FFMPEG
 {
-    bool open( const char* filename );
+    bool open(const char* filename);
+    bool open_buffer(unsigned char* pBuffer, unsigned long bufLen);
     void close();
 
     double getProperty(int) const;
@@ -1029,6 +1030,152 @@ exit_func:
     if( !valid )
         close();
 
+    return valid;
+}
+
+
+
+
+bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
+{
+    InternalFFMpegRegister::init();
+    AutoLock lock(_mutex);
+    unsigned i;
+    bool valid = false;
+    CV_LOG_DEBUG(NULL, "open_buffer: called");
+#if 0
+    close();
+
+#if USE_AV_INTERRUPT_CALLBACK
+    /* interrupt callback */
+    interrupt_metadata.timeout_after_ms = LIBAVFORMAT_INTERRUPT_OPEN_TIMEOUT_MS;
+    get_monotonic_time(&interrupt_metadata.value);
+
+    ic = avformat_alloc_context();
+    ic->interrupt_callback.callback = _opencv_ffmpeg_interrupt_callback;
+    ic->interrupt_callback.opaque = &interrupt_metadata;
+#endif
+
+#if LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(52, 111, 0)
+#ifndef NO_GETENV
+    char* options = getenv("OPENCV_FFMPEG_CAPTURE_OPTIONS");
+    if(options == NULL)
+    {
+        av_dict_set(&dict, "rtsp_transport", "tcp", 0);
+    }
+    else
+    {
+#if LIBAVUTIL_BUILD >= (LIBAVUTIL_VERSION_MICRO >= 100 ? CALC_FFMPEG_VERSION(52, 17, 100) : CALC_FFMPEG_VERSION(52, 7, 0))
+        av_dict_parse_string(&dict, options, ";", "|", 0);
+#else
+        av_dict_set(&dict, "rtsp_transport", "tcp", 0);
+#endif
+    }
+#else
+    av_dict_set(&dict, "rtsp_transport", "tcp", 0);
+#endif
+    AVInputFormat* input_format = NULL;
+    AVDictionaryEntry* entry = av_dict_get(dict, "input_format", NULL, 0);
+    if (entry != 0)
+    {
+      input_format = av_find_input_format(entry->value);
+    }
+
+    int err = avformat_open_input(&ic, _filename, input_format, &dict);
+#else
+    int err = av_open_input_file(&ic, _filename, NULL, 0, NULL);
+#endif
+
+    if (err < 0)
+    {
+        CV_WARN("Error opening file");
+        CV_WARN(_filename);
+        goto exit_func;
+    }
+    err =
+#if LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(53, 6, 0)
+    avformat_find_stream_info(ic, NULL);
+#else
+    av_find_stream_info(ic);
+#endif
+    if (err < 0)
+    {
+        CV_WARN("Could not find codec parameters");
+        goto exit_func;
+    }
+    for(i = 0; i < ic->nb_streams; i++)
+    {
+#if LIBAVFORMAT_BUILD > 4628
+        AVCodecContext *enc = ic->streams[i]->codec;
+#else
+        AVCodecContext *enc = &ic->streams[i]->codec;
+#endif
+
+//#ifdef FF_API_THREAD_INIT
+//        avcodec_thread_init(enc, get_number_of_cpus());
+//#else
+        enc->thread_count = get_number_of_cpus();
+//#endif
+
+#if LIBAVFORMAT_BUILD < CALC_FFMPEG_VERSION(53, 2, 0)
+#define AVMEDIA_TYPE_VIDEO CODEC_TYPE_VIDEO
+#endif
+
+        if( AVMEDIA_TYPE_VIDEO == enc->codec_type && video_stream < 0)
+        {
+            // backup encoder' width/height
+            int enc_width = enc->width;
+            int enc_height = enc->height;
+
+            AVCodec *codec;
+            if(av_dict_get(dict, "video_codec", NULL, 0) == NULL) {
+                codec = avcodec_find_decoder(enc->codec_id);
+            } else {
+                codec = avcodec_find_decoder_by_name(av_dict_get(dict, "video_codec", NULL, 0)->value);
+            }
+            if (!codec ||
+#if LIBAVCODEC_VERSION_INT >= ((53<<16)+(8<<8)+0)
+                avcodec_open2(enc, codec, NULL)
+#else
+                avcodec_open(enc, codec)
+#endif
+                < 0)
+                goto exit_func;
+
+            // checking width/height (since decoder can sometimes alter it, eg. vp6f)
+            if (enc_width && (enc->width != enc_width)) { enc->width = enc_width; }
+            if (enc_height && (enc->height != enc_height)) { enc->height = enc_height; }
+
+            video_stream = i;
+            video_st = ic->streams[i];
+#if LIBAVCODEC_BUILD >= (LIBAVCODEC_VERSION_MICRO >= 100 \
+    ? CALC_FFMPEG_VERSION(55, 45, 101) : CALC_FFMPEG_VERSION(55, 28, 1))
+            picture = av_frame_alloc();
+#else
+            picture = avcodec_alloc_frame();
+#endif
+
+            frame.width = enc->width;
+            frame.height = enc->height;
+            frame.cn = 3;
+            frame.step = 0;
+            frame.data = NULL;
+            break;
+        }
+    }
+
+    if(video_stream >= 0) valid = true;
+
+exit_func:
+
+#if USE_AV_INTERRUPT_CALLBACK
+    // deactivate interrupt callback
+    interrupt_metadata.timeout_after_ms = 0;
+#endif
+
+    if( !valid )
+        close();
+#endif
     return valid;
 }
 
@@ -2661,8 +2808,6 @@ bool CvVideoWriter_FFMPEG::open( const char * filename, int fourcc,
     return true;
 }
 
-
-
 CvCapture_FFMPEG* cvCreateFileCapture_FFMPEG( const char* filename )
 {
     CvCapture_FFMPEG* capture = (CvCapture_FFMPEG*)malloc(sizeof(*capture));
@@ -2677,6 +2822,20 @@ CvCapture_FFMPEG* cvCreateFileCapture_FFMPEG( const char* filename )
     return 0;
 }
 
+CvCapture_FFMPEG* cvCreateBufferCapture_FFMPEG( unsigned char* pBuffer, unsigned long bufLen )
+{
+    CV_LOG_DEBUG(NULL, "cvCreateBufferCapture_FFMPEG called FIXME");
+    	CvCapture_FFMPEG* capture = (CvCapture_FFMPEG*)malloc(sizeof(*capture));
+    if (!capture)
+        return 0;
+    capture->init();
+    if( capture->open_buffer( pBuffer, bufLen ))
+        return capture;
+
+    capture->close();
+    free(capture);
+    return 0;
+}
 
 void cvReleaseCapture_FFMPEG(CvCapture_FFMPEG** capture)
 {

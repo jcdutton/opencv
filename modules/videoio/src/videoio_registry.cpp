@@ -41,9 +41,9 @@ namespace {
     cap, (BackendMode)(mode), 1000, name, createPluginBackendFactory(cap, name) \
 }
 
-#define DECLARE_STATIC_BACKEND(cap, name, mode, createCaptureFile, createCaptureCamera, createWriter) \
+#define DECLARE_STATIC_BACKEND(cap, name, mode, createCaptureFile, createCaptureBuffer, createCaptureCamera, createWriter) \
 { \
-    cap, (BackendMode)(mode), 1000, name, createBackendFactory(createCaptureFile, createCaptureCamera, createWriter) \
+    cap, (BackendMode)(mode), 1000, name, createBackendFactory(createCaptureFile, createCaptureBuffer, createCaptureCamera, createWriter) \
 }
 
 /** Ordering guidelines:
@@ -57,83 +57,83 @@ namespace {
 static const struct VideoBackendInfo builtin_backends[] =
 {
 #ifdef HAVE_FFMPEG
-    DECLARE_STATIC_BACKEND(CAP_FFMPEG, "FFMPEG", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, cvCreateFileCapture_FFMPEG_proxy, 0, cvCreateVideoWriter_FFMPEG_proxy),
+    DECLARE_STATIC_BACKEND(CAP_FFMPEG, "FFMPEG", MODE_CAPTURE_BY_FILENAME | MODE_CAPTURE_BY_BUFFER | MODE_WRITER, cvCreateFileCapture_FFMPEG_proxy, cvCreateBufferCapture_FFMPEG_proxy, 0, cvCreateVideoWriter_FFMPEG_proxy),
 #elif defined(ENABLE_PLUGINS) || defined(HAVE_FFMPEG_WRAPPER)
-    DECLARE_DYNAMIC_BACKEND(CAP_FFMPEG, "FFMPEG", MODE_CAPTURE_BY_FILENAME | MODE_WRITER),
+    DECLARE_DYNAMIC_BACKEND(CAP_FFMPEG, "FFMPEG", MODE_CAPTURE_BY_FILENAME | MODE_CAPTURE_BY_BUFFER | MODE_WRITER),
 #endif
 
 #ifdef HAVE_GSTREAMER
-    DECLARE_STATIC_BACKEND(CAP_GSTREAMER, "GSTREAMER", MODE_CAPTURE_ALL | MODE_WRITER, createGStreamerCapture_file, createGStreamerCapture_cam, create_GStreamer_writer),
+    DECLARE_STATIC_BACKEND(CAP_GSTREAMER, "GSTREAMER", MODE_CAPTURE_ALL | MODE_WRITER, createGStreamerCapture_file, 0, createGStreamerCapture_cam, create_GStreamer_writer),
 #elif defined(ENABLE_PLUGINS)
     DECLARE_DYNAMIC_BACKEND(CAP_GSTREAMER, "GSTREAMER", MODE_CAPTURE_ALL | MODE_WRITER),
 #endif
 
 #ifdef HAVE_MFX // Media SDK
-    DECLARE_STATIC_BACKEND(CAP_INTEL_MFX, "INTEL_MFX", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, create_MFX_capture, 0, create_MFX_writer),
+    DECLARE_STATIC_BACKEND(CAP_INTEL_MFX, "INTEL_MFX", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, create_MFX_capture, 0, 0, create_MFX_writer),
 #elif defined(ENABLE_PLUGINS)
     DECLARE_DYNAMIC_BACKEND(CAP_INTEL_MFX, "INTEL_MFX", MODE_CAPTURE_BY_FILENAME | MODE_WRITER),
 #endif
 
     // Apple platform
 #ifdef HAVE_AVFOUNDATION
-    DECLARE_STATIC_BACKEND(CAP_AVFOUNDATION, "AVFOUNDATION", MODE_CAPTURE_ALL | MODE_WRITER, create_AVFoundation_capture_file, create_AVFoundation_capture_cam, create_AVFoundation_writer),
+    DECLARE_STATIC_BACKEND(CAP_AVFOUNDATION, "AVFOUNDATION", MODE_CAPTURE_ALL | MODE_WRITER, create_AVFoundation_capture_file, 0, create_AVFoundation_capture_cam, create_AVFoundation_writer),
 #endif
 
     // Windows
 #ifdef WINRT_VIDEO
-    DECLARE_STATIC_BACKEND(CAP_WINRT, "WINRT", MODE_CAPTURE_BY_INDEX, 0, create_WRT_capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_WINRT, "WINRT", MODE_CAPTURE_BY_INDEX, 0, 0, create_WRT_capture, 0),
 #endif
 #ifdef HAVE_MSMF
-    DECLARE_STATIC_BACKEND(CAP_MSMF, "MSMF", MODE_CAPTURE_ALL | MODE_WRITER, cvCreateCapture_MSMF, cvCreateCapture_MSMF, cvCreateVideoWriter_MSMF),
+    DECLARE_STATIC_BACKEND(CAP_MSMF, "MSMF", MODE_CAPTURE_ALL | MODE_WRITER, cvCreateCapture_MSMF, 0, cvCreateCapture_MSMF, cvCreateVideoWriter_MSMF),
 #endif
 #ifdef HAVE_DSHOW
-    DECLARE_STATIC_BACKEND(CAP_DSHOW, "DSHOW", MODE_CAPTURE_BY_INDEX, 0, create_DShow_capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_DSHOW, "DSHOW", MODE_CAPTURE_BY_INDEX, 0, 0, create_DShow_capture, 0),
 #endif
 
     // Linux, some Unix
 #if defined HAVE_CAMV4L2
-    DECLARE_STATIC_BACKEND(CAP_V4L2, "V4L2", MODE_CAPTURE_ALL, create_V4L_capture_file, create_V4L_capture_cam, 0),
+    DECLARE_STATIC_BACKEND(CAP_V4L2, "V4L2", MODE_CAPTURE_ALL, create_V4L_capture_file, 0, create_V4L_capture_cam, 0),
 #elif defined HAVE_VIDEOIO
-    DECLARE_STATIC_BACKEND(CAP_V4L, "V4L_BSD", MODE_CAPTURE_ALL, create_V4L_capture_file, create_V4L_capture_cam, 0),
+    DECLARE_STATIC_BACKEND(CAP_V4L, "V4L_BSD", MODE_CAPTURE_ALL, create_V4L_capture_file, 0, create_V4L_capture_cam, 0),
 #endif
 
 
     // RGB-D universal
 #ifdef HAVE_OPENNI2
-    DECLARE_STATIC_BACKEND(CAP_OPENNI2, "OPENNI2", MODE_CAPTURE_ALL, create_OpenNI2_capture_file, create_OpenNI2_capture_cam, 0),
+    DECLARE_STATIC_BACKEND(CAP_OPENNI2, "OPENNI2", MODE_CAPTURE_ALL, create_OpenNI2_capture_file, 0, create_OpenNI2_capture_cam, 0),
 #endif
 
 #ifdef HAVE_LIBREALSENSE
-    DECLARE_STATIC_BACKEND(CAP_REALSENSE, "INTEL_REALSENSE", MODE_CAPTURE_BY_INDEX, 0, create_RealSense_capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_REALSENSE, "INTEL_REALSENSE", MODE_CAPTURE_BY_INDEX, 0, 0, create_RealSense_capture, 0),
 #endif
 
     // OpenCV file-based only
-    DECLARE_STATIC_BACKEND(CAP_IMAGES, "CV_IMAGES", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, create_Images_capture, 0, create_Images_writer),
-    DECLARE_STATIC_BACKEND(CAP_OPENCV_MJPEG, "CV_MJPEG", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, createMotionJpegCapture, 0, createMotionJpegWriter),
+    DECLARE_STATIC_BACKEND(CAP_IMAGES, "CV_IMAGES", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, create_Images_capture, 0, 0, create_Images_writer),
+    DECLARE_STATIC_BACKEND(CAP_OPENCV_MJPEG, "CV_MJPEG", MODE_CAPTURE_BY_FILENAME | MODE_WRITER, createMotionJpegCapture, 0, 0, createMotionJpegWriter),
 
     // special interfaces / stereo cameras / other SDKs
 #if defined(HAVE_DC1394_2)
-    DECLARE_STATIC_BACKEND(CAP_FIREWIRE, "FIREWIRE", MODE_CAPTURE_BY_INDEX, 0, create_DC1394_capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_FIREWIRE, "FIREWIRE", MODE_CAPTURE_BY_INDEX, 0, 0, create_DC1394_capture, 0),
 #endif
     // GigE
 #ifdef HAVE_PVAPI
-    DECLARE_STATIC_BACKEND(CAP_PVAPI, "PVAPI", MODE_CAPTURE_BY_INDEX, 0, create_PvAPI_capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_PVAPI, "PVAPI", MODE_CAPTURE_BY_INDEX, 0, 0, create_PvAPI_capture, 0),
 #endif
 #ifdef HAVE_XIMEA
-    DECLARE_STATIC_BACKEND(CAP_XIAPI, "XIMEA", MODE_CAPTURE_ALL, create_XIMEA_capture_file, create_XIMEA_capture_cam, 0),
+    DECLARE_STATIC_BACKEND(CAP_XIAPI, "XIMEA", MODE_CAPTURE_ALL, create_XIMEA_capture_file, 0, create_XIMEA_capture_cam, 0),
 #endif
 #ifdef HAVE_ARAVIS_API
-    DECLARE_STATIC_BACKEND(CAP_ARAVIS, "ARAVIS", MODE_CAPTURE_BY_INDEX, 0, create_Aravis_capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_ARAVIS, "ARAVIS", MODE_CAPTURE_BY_INDEX, 0, 0, create_Aravis_capture, 0),
 #endif
 
 #ifdef HAVE_GPHOTO2
-    DECLARE_STATIC_BACKEND(CAP_GPHOTO2, "GPHOTO2", MODE_CAPTURE_ALL, createGPhoto2Capture, createGPhoto2Capture, 0),
+    DECLARE_STATIC_BACKEND(CAP_GPHOTO2, "GPHOTO2", MODE_CAPTURE_ALL, createGPhoto2Capture, 0, createGPhoto2Capture, 0),
 #endif
 #ifdef HAVE_XINE
-    DECLARE_STATIC_BACKEND(CAP_XINE, "XINE", MODE_CAPTURE_BY_FILENAME, createXINECapture, 0, 0),
+    DECLARE_STATIC_BACKEND(CAP_XINE, "XINE", MODE_CAPTURE_BY_FILENAME, createXINECapture, 0, 0, 0),
 #endif
 #ifdef HAVE_ANDROID_MEDIANDK
-    DECLARE_STATIC_BACKEND(CAP_ANDROID, "ANDROID_MEDIANDK", MODE_CAPTURE_BY_FILENAME, createAndroidCapture_file, 0, 0),
+    DECLARE_STATIC_BACKEND(CAP_ANDROID, "ANDROID_MEDIANDK", MODE_CAPTURE_BY_FILENAME, createAndroidCapture_file, 0, 0, 0),
 #endif
     // dropped backends: MIL, TYZX
 };
@@ -273,6 +273,17 @@ public:
         }
         return result;
     }
+    inline std::vector<VideoBackendInfo> getAvailableBackends_CaptureByBuffer() const
+    {
+        std::vector<VideoBackendInfo> result;
+        for (size_t i = 0; i < enabledBackends.size(); i++)
+        {
+            const VideoBackendInfo& info = enabledBackends[i];
+            if (info.mode & MODE_CAPTURE_BY_BUFFER)
+                result.push_back(info);
+        }
+        return result;
+    }
     inline std::vector<VideoBackendInfo> getAvailableBackends_Writer() const
     {
         std::vector<VideoBackendInfo> result;
@@ -298,6 +309,11 @@ std::vector<VideoBackendInfo> getAvailableBackends_CaptureByIndex()
 std::vector<VideoBackendInfo> getAvailableBackends_CaptureByFilename()
 {
     const std::vector<VideoBackendInfo> result = VideoBackendRegistry::getInstance().getAvailableBackends_CaptureByFilename();
+    return result;
+}
+std::vector<VideoBackendInfo> getAvailableBackends_CaptureByBuffer()
+{
+    const std::vector<VideoBackendInfo> result = VideoBackendRegistry::getInstance().getAvailableBackends_CaptureByBuffer();
     return result;
 }
 std::vector<VideoBackendInfo> getAvailableBackends_Writer()
@@ -342,6 +358,16 @@ std::vector<VideoCaptureAPIs> getCameraBackends()
 std::vector<VideoCaptureAPIs> getStreamBackends()
 {
     const std::vector<VideoBackendInfo> backends = VideoBackendRegistry::getInstance().getAvailableBackends_CaptureByFilename();
+    std::vector<VideoCaptureAPIs> result;
+    for (size_t i = 0; i < backends.size(); i++)
+        result.push_back((VideoCaptureAPIs)backends[i].id);
+    return result;
+
+}
+
+std::vector<VideoCaptureAPIs> getBufferBackends()
+{
+    const std::vector<VideoBackendInfo> backends = VideoBackendRegistry::getInstance().getAvailableBackends_CaptureByBuffer();
     std::vector<VideoCaptureAPIs> result;
     for (size_t i = 0; i < backends.size(); i++)
         result.push_back((VideoCaptureAPIs)backends[i].id);

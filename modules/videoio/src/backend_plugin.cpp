@@ -240,6 +240,7 @@ public:
 
     Ptr<IVideoCapture> createCapture(int camera) const CV_OVERRIDE;
     Ptr<IVideoCapture> createCapture(const std::string &filename) const CV_OVERRIDE;
+    Ptr<IVideoCapture> createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen) const CV_OVERRIDE;
     Ptr<IVideoWriter>  createWriter(const std::string &filename, int fourcc, double fps, const cv::Size &sz, bool isColor) const CV_OVERRIDE;
 };
 
@@ -413,6 +414,17 @@ public:
         return Ptr<PluginCapture>();
     }
 
+#if 0
+    Ptr<PluginCapture> create(const OpenCV_VideoIO_Plugin_API_preview* plugin_api,
+            unsigned char* pBuffer, unsigned long bufLen)
+    {
+        CV_Assert(plugin_api);
+        CvPluginCapture capture = NULL;
+		CV_LOG_INFO(NULL, "createBuffer called");
+        return Ptr<PluginCapture>();
+    }
+#endif
+
     PluginCapture(const OpenCV_VideoIO_Plugin_API_preview* plugin_api, CvPluginCapture capture)
         : plugin_api_(plugin_api), capture_(capture)
     {
@@ -580,6 +592,25 @@ Ptr<IVideoCapture> PluginBackend::createCapture(const std::string &filename) con
     }
     return Ptr<IVideoCapture>();
 }
+
+#if 1
+Ptr<IVideoCapture> PluginBackend::createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen) const
+{
+        CV_LOG_DEBUG(NULL, "PluginBackend::createCaptureBuffer called FIXME");
+#if 0
+    try
+    {
+        if (plugin_api_)
+            return PluginCapture::create(plugin_api_, pBuffer, bufLen); //.staticCast<IVideoCapture>();
+    }
+    catch (...)
+    {
+        CV_LOG_DEBUG(NULL, "Video I/O: can't use buffer");
+    }
+#endif
+    return Ptr<IVideoCapture>();
+}
+#endif
 
 Ptr<IVideoWriter> PluginBackend::createWriter(const std::string &filename, int fourcc, double fps, const cv::Size &sz, bool isColor) const
 {
