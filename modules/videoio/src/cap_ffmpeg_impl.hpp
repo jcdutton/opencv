@@ -1033,7 +1033,43 @@ exit_func:
     return valid;
 }
 
+struct buffer_state_s {
+	unsigned char *buffer;
+	unsigned long buffer_size;
+	long position;
+};
 
+static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
+{
+    // This function must fill the buffer with data and return number of bytes copied.
+    // opaque is the pointer to private_data in the call to av_alloc_put_byte (4th param)
+    
+    struct buffer_state_s *buffer_state = reinterpret_cast<struct buffer_state_s *>(opaque);
+    memcpy(buf, &(buffer_state->buffer[buffer_state->position]), buf_size);
+    return buf_size;
+}
+
+static int64_t seek_buffer(void* opaque, int64_t pos, int whence)
+{
+    struct buffer_state_s *buffer_state = reinterpret_cast<struct buffer_state_s *>(opaque);
+    int64_t result = -1;
+    switch (whence) {
+	    case SEEK_SET:
+		    buffer_state->position = pos;
+		    result = pos;
+		    break;
+	    case SEEK_CUR:
+		    result = buffer_state->position;
+		    break;
+	    case SEEK_END:
+		    buffer_state->position = buffer_state->buffer_size;
+		    result = buffer_state->position;
+		    break;
+	    default:
+		    break;
+    }
+    return result;
+}
 
 
 bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
@@ -1041,67 +1077,86 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     InternalFFMpegRegister::init();
     AutoLock lock(_mutex);
     unsigned i;
+    int err = 0;
     bool valid = false;
+    //char *_filename = "none";
     CV_LOG_DEBUG(NULL, "open_buffer: called");
-#if 0
+    AVInputFormat *pAVInputFormat;
     close();
 
+    ic = avformat_alloc_context();
 #if USE_AV_INTERRUPT_CALLBACK
     /* interrupt callback */
     interrupt_metadata.timeout_after_ms = LIBAVFORMAT_INTERRUPT_OPEN_TIMEOUT_MS;
     get_monotonic_time(&interrupt_metadata.value);
 
-    ic = avformat_alloc_context();
     ic->interrupt_callback.callback = _opencv_ffmpeg_interrupt_callback;
     ic->interrupt_callback.opaque = &interrupt_metadata;
 #endif
 
-#if LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(52, 111, 0)
-#ifndef NO_GETENV
-    char* options = getenv("OPENCV_FFMPEG_CAPTURE_OPTIONS");
-    if(options == NULL)
-    {
-        av_dict_set(&dict, "rtsp_transport", "tcp", 0);
+//    int err = av_open_input_file(&ic, _filename, NULL, 0, NULL);
+    // Create internal Buffer for FFmpeg:
+    const int av_BufSize = 32 * 1024;
+    unsigned char* av_buffer = new unsigned char[av_BufSize];
+    struct buffer_state_s *buffer_state = new struct buffer_state_s[1];
+    buffer_state->buffer = pBuffer; 
+    buffer_state->buffer_size = bufLen; 
+    buffer_state->position = 0;
+
+    ic->pb = avio_alloc_context(av_buffer, av_BufSize, 0, buffer_state, read_buffer, NULL, seek_buffer);
+    CV_LOG_DEBUG(NULL, "avio_alloc_context done");
+    CV_LOG_DEBUG(NULL, cv::format("pBuffer: %p bufLen: %lu", pBuffer, bufLen));
+    CV_LOG_DEBUG(NULL, cv::format("av_buffer: %p av_BufSize: %d", av_buffer, av_BufSize));
+
+    if(!ic->pb) {
+        // handle error
+        CV_LOG_WARNING(NULL, "Error avio_alloc_context");
+        //CV_LOG_WARNING(NULL, cv::format("Filename: %s", _filename));
+        goto exit_func_ob;
     }
-    else
-    {
-#if LIBAVUTIL_BUILD >= (LIBAVUTIL_VERSION_MICRO >= 100 ? CALC_FFMPEG_VERSION(52, 17, 100) : CALC_FFMPEG_VERSION(52, 7, 0))
-        av_dict_parse_string(&dict, options, ";", "|", 0);
-#else
-        av_dict_set(&dict, "rtsp_transport", "tcp", 0);
-#endif
+    // Need to probe buffer for input format unless you already know it
+    AVProbeData probe_data;
+    probe_data.buf_size = (bufLen < 4096) ? bufLen : 4096;
+    probe_data.filename = "stream";
+    probe_data.buf = (unsigned char *) malloc(probe_data.buf_size);
+    memcpy(probe_data.buf, pBuffer, probe_data.buf_size);
+
+    pAVInputFormat = av_probe_input_format(&probe_data, 1);
+    CV_LOG_DEBUG(NULL, "av_probe_input_format 1 done");
+
+    if(!pAVInputFormat) {
+        pAVInputFormat = av_probe_input_format(&probe_data, 0);
+        CV_LOG_DEBUG(NULL, "av_probe_input_format 0 done");
     }
-#else
-    av_dict_set(&dict, "rtsp_transport", "tcp", 0);
-#endif
-    AVInputFormat* input_format = NULL;
-    AVDictionaryEntry* entry = av_dict_get(dict, "input_format", NULL, 0);
-    if (entry != 0)
-    {
-      input_format = av_find_input_format(entry->value);
+    // cleanup
+    free(probe_data.buf);
+    probe_data.buf = NULL;
+
+    if(!pAVInputFormat) {
+        // handle error
+        CV_LOG_ERROR(NULL, "Error pAVInputFormat");
+        goto exit_func_ob;
     }
 
-    int err = avformat_open_input(&ic, _filename, input_format, &dict);
-#else
-    int err = av_open_input_file(&ic, _filename, NULL, 0, NULL);
-#endif
-
-    if (err < 0)
-    {
-        CV_WARN("Error opening file");
-        CV_WARN(_filename);
-        goto exit_func;
+    pAVInputFormat->flags |= AVFMT_NOFILE;
+    ic->iformat = pAVInputFormat;
+    ic->flags = AVFMT_FLAG_CUSTOM_IO;
+    //err = av_open_input_stream(&ic , ic->pb, "stream", pAVInputFormat, NULL);
+    err = avformat_open_input(&ic, "", 0, 0);
+    if(err < 0) {
+        // Error Handling
+        CV_LOG_ERROR(NULL, cv::format("avformat_open_input failed err:%d", err));
+        goto exit_func_ob;
     }
-    err =
 #if LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(53, 6, 0)
-    avformat_find_stream_info(ic, NULL);
+    err = avformat_find_stream_info(ic, NULL);
 #else
-    av_find_stream_info(ic);
+    err = av_find_stream_info(ic);
 #endif
     if (err < 0)
     {
-        CV_WARN("Could not find codec parameters");
-        goto exit_func;
+        CV_LOG_WARNING(NULL, "Could not find codec parameters");
+        goto exit_func_ob;
     }
     for(i = 0; i < ic->nb_streams; i++)
     {
@@ -1140,7 +1195,7 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
                 avcodec_open(enc, codec)
 #endif
                 < 0)
-                goto exit_func;
+                goto exit_func_ob;
 
             // checking width/height (since decoder can sometimes alter it, eg. vp6f)
             if (enc_width && (enc->width != enc_width)) { enc->width = enc_width; }
@@ -1166,7 +1221,7 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
 
     if(video_stream >= 0) valid = true;
 
-exit_func:
+exit_func_ob:
 
 #if USE_AV_INTERRUPT_CALLBACK
     // deactivate interrupt callback
@@ -1175,7 +1230,6 @@ exit_func:
 
     if( !valid )
         close();
-#endif
     return valid;
 }
 
