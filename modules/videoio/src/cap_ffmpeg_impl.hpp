@@ -41,6 +41,7 @@
 //M*/
 
 #include <iostream>
+#include <signal.h>
 #include "cap_ffmpeg_legacy_api.hpp"
 
 using namespace cv;
@@ -1045,12 +1046,16 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
     // opaque is the pointer to private_data in the call to av_alloc_put_byte (4th param)
     
     struct buffer_state_s *buffer_state = reinterpret_cast<struct buffer_state_s *>(opaque);
-    if ((buffer_state->position + buf_size) > buffer_state->buffer_size) {
-    	CV_LOG_DEBUG(NULL, "read past end of buffer");
-	exit(1);
+    int buf_size_to_read = buf_size;
+    if ((buffer_state->position + buf_size) > (buffer_state->buffer_size)) {
+	buf_size_to_read = buffer_state->buffer_size - buffer_state->position; 
+	CV_LOG_ERROR(NULL,  cv::format("read past end of buffer: pos:%ld + len:%d sum:%ld > buffer_size:%ld buf_size_to_read:%d",
+			buffer_state->position, buf_size, buffer_state->position + buf_size, buffer_state->buffer_size, buf_size_to_read));
+
+	//raise(SIGTRAP);
     }
-    memcpy(buf, &(buffer_state->buffer[buffer_state->position]), buf_size);
-    return buf_size;
+    memcpy(buf, &(buffer_state->buffer[buffer_state->position]), buf_size_to_read);
+    return buf_size_to_read;
 }
 
 static int64_t seek_buffer(void* opaque, int64_t pos, int whence)
@@ -1087,7 +1092,6 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     CV_LOG_DEBUG(NULL, "open_buffer: called");
     AVInputFormat *pAVInputFormat;
     close();
-
     ic = avformat_alloc_context();
 #if USE_AV_INTERRUPT_CALLBACK
     /* interrupt callback */
@@ -1122,7 +1126,7 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     AVProbeData probe_data;
     probe_data.buf_size = (bufLen < 65536) ? bufLen : 65536;
     /* Must initialise the whole of the probe_data struct. */
-    probe_data.filename = NULL;
+    probe_data.filename = "stream"; // Need something larger that 4 chars, due to ffmpeg not checking string length.
     probe_data.mime_type = NULL;
     probe_data.buf = (unsigned char *) malloc(probe_data.buf_size);
     memcpy(probe_data.buf, pBuffer, probe_data.buf_size);
@@ -1133,11 +1137,13 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
 
     pAVInputFormat = av_probe_input_format(&probe_data, 1);
     CV_LOG_DEBUG(NULL, "av_probe_input_format 1 done");
-
-    if(!pAVInputFormat) {
-        pAVInputFormat = av_probe_input_format(&probe_data, 0);
-        CV_LOG_DEBUG(NULL, "av_probe_input_format 0 done");
-    }
+    pAVInputFormat->flags |= AVFMT_NOFILE;
+    ic->iformat = pAVInputFormat;
+    ic->flags = AVFMT_FLAG_CUSTOM_IO; // Keeps close() happy
+    //if(!pAVInputFormat) {
+    //    pAVInputFormat = av_probe_input_format(&probe_data, 0);
+    //    CV_LOG_DEBUG(NULL, "av_probe_input_format 0 done");
+    //}
     // cleanup
     free(probe_data.buf);
     probe_data.buf = NULL;
@@ -1145,12 +1151,10 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     if(!pAVInputFormat) {
         // handle error
         CV_LOG_ERROR(NULL, "Error pAVInputFormat");
+	//raise(SIGTRAP);
         goto exit_func_ob;
     }
 
-    pAVInputFormat->flags |= AVFMT_NOFILE;
-    ic->iformat = pAVInputFormat;
-    ic->flags = AVFMT_FLAG_CUSTOM_IO;
     //err = av_open_input_stream(&ic , ic->pb, "stream", pAVInputFormat, NULL);
     err = avformat_open_input(&ic, "", 0, 0);
     if(err < 0) {
