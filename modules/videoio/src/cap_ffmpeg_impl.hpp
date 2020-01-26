@@ -1124,9 +1124,9 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     }
     // Need to probe buffer for input format unless you already know it
     AVProbeData probe_data;
-    probe_data.buf_size = (bufLen < 65536) ? bufLen : 65536;
+    probe_data.buf_size = (bufLen < 100100) ? bufLen : 100100;
     /* Must initialise the whole of the probe_data struct. */
-    probe_data.filename = "stream"; // Need something larger that 4 chars, due to ffmpeg not checking string length.
+    probe_data.filename = "unknown"; // Need something larger that 4 chars, due to ffmpeg not checking string length.
     probe_data.mime_type = NULL;
     probe_data.buf = (unsigned char *) malloc(probe_data.buf_size);
     memcpy(probe_data.buf, pBuffer, probe_data.buf_size);
@@ -1139,10 +1139,11 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     CV_LOG_DEBUG(NULL, "av_probe_input_format 1 done");
     ic->iformat = pAVInputFormat;
     ic->flags = AVFMT_FLAG_CUSTOM_IO; // Keeps close() happy
-    //if(!pAVInputFormat) {
-    //    pAVInputFormat = av_probe_input_format(&probe_data, 0);
-    //    CV_LOG_DEBUG(NULL, "av_probe_input_format 0 done");
-    //}
+    if(!pAVInputFormat) {
+        pAVInputFormat = av_probe_input_format(&probe_data, 0);
+    	ic->iformat = pAVInputFormat;
+        CV_LOG_DEBUG(NULL, "av_probe_input_format 0 done");
+    }
     // cleanup
     free(probe_data.buf);
     probe_data.buf = NULL;
