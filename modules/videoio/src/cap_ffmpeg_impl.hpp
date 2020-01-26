@@ -1049,7 +1049,7 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
     int buf_size_to_read = buf_size;
     if ((buffer_state->position + buf_size) > (buffer_state->buffer_size)) {
 	buf_size_to_read = buffer_state->buffer_size - buffer_state->position; 
-	CV_LOG_ERROR(NULL,  cv::format("read past end of buffer: pos:%ld + len:%d sum:%ld > buffer_size:%ld buf_size_to_read:%d",
+	CV_LOG_DEBUG(NULL,  cv::format("read past end of buffer: pos:%ld + len:%d sum:%ld > buffer_size:%ld buf_size_to_read:%d",
 			buffer_state->position, buf_size, buffer_state->position + buf_size, buffer_state->buffer_size, buf_size_to_read));
 
 	//raise(SIGTRAP);
@@ -1137,7 +1137,6 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
 
     pAVInputFormat = av_probe_input_format(&probe_data, 1);
     CV_LOG_DEBUG(NULL, "av_probe_input_format 1 done");
-    pAVInputFormat->flags |= AVFMT_NOFILE;
     ic->iformat = pAVInputFormat;
     ic->flags = AVFMT_FLAG_CUSTOM_IO; // Keeps close() happy
     //if(!pAVInputFormat) {
@@ -1150,12 +1149,13 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
 
     if(!pAVInputFormat) {
         // handle error
-        CV_LOG_ERROR(NULL, "Error pAVInputFormat");
+        CV_LOG_DEBUG(NULL, "Error pAVInputFormat");
 	//raise(SIGTRAP);
         goto exit_func_ob;
     }
 
     //err = av_open_input_stream(&ic , ic->pb, "stream", pAVInputFormat, NULL);
+    pAVInputFormat->flags |= AVFMT_NOFILE;
     err = avformat_open_input(&ic, "", 0, 0);
     if(err < 0) {
         // Error Handling
