@@ -1035,7 +1035,7 @@ exit_func:
 
 struct buffer_state_s {
 	unsigned char *buffer;
-	unsigned long buffer_size;
+	long buffer_size;
 	long position;
 };
 
@@ -1045,6 +1045,10 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
     // opaque is the pointer to private_data in the call to av_alloc_put_byte (4th param)
     
     struct buffer_state_s *buffer_state = reinterpret_cast<struct buffer_state_s *>(opaque);
+    if ((buffer_state->position + buf_size) > buffer_state->buffer_size) {
+    	CV_LOG_DEBUG(NULL, "read past end of buffer");
+	exit(1);
+    }
     memcpy(buf, &(buffer_state->buffer[buffer_state->position]), buf_size);
     return buf_size;
 }
@@ -1116,10 +1120,16 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     }
     // Need to probe buffer for input format unless you already know it
     AVProbeData probe_data;
-    probe_data.buf_size = (bufLen < 4096) ? bufLen : 4096;
-    probe_data.filename = "stream";
+    probe_data.buf_size = (bufLen < 65536) ? bufLen : 65536;
+    /* Must initialise the whole of the probe_data struct. */
+    probe_data.filename = NULL;
+    probe_data.mime_type = NULL;
     probe_data.buf = (unsigned char *) malloc(probe_data.buf_size);
     memcpy(probe_data.buf, pBuffer, probe_data.buf_size);
+    /* Probe reads past end of buffer, so reduce the buffer that the probe thinks is there. */
+    if (probe_data.buf_size > 36) {
+	    probe_data.buf_size-=36;
+    }
 
     pAVInputFormat = av_probe_input_format(&probe_data, 1);
     CV_LOG_DEBUG(NULL, "av_probe_input_format 1 done");
