@@ -1047,6 +1047,8 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
     
     struct buffer_state_s *buffer_state = reinterpret_cast<struct buffer_state_s *>(opaque);
     int buf_size_to_read = buf_size;
+    CV_LOG_DEBUG(NULL,  cv::format("read_buffer: pos:%ld + len:%d sum:%ld > buffer_size:%ld buf_size_to_read:%d",
+			buffer_state->position, buf_size, buffer_state->position + buf_size, buffer_state->buffer_size, buf_size_to_read));
     if ((buffer_state->position + buf_size) > (buffer_state->buffer_size)) {
 	buf_size_to_read = buffer_state->buffer_size - buffer_state->position; 
 	CV_LOG_DEBUG(NULL,  cv::format("read past end of buffer: pos:%ld + len:%d sum:%ld > buffer_size:%ld buf_size_to_read:%d",
@@ -1061,20 +1063,32 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
 static int64_t seek_buffer(void* opaque, int64_t pos, int whence)
 {
     struct buffer_state_s *buffer_state = reinterpret_cast<struct buffer_state_s *>(opaque);
+    CV_LOG_DEBUG(NULL,  cv::format("seek_buffer: buffer_pos:%ld buffer_size:%ld seek_pos:%ld whence:%d",
+			buffer_state->position, buffer_state->buffer_size, pos, whence));
     int64_t result = -1;
     switch (whence) {
 	    case SEEK_SET:
+		    if (pos < 0) pos = 0;
+		    if (pos > buffer_state->buffer_size) pos = buffer_state->buffer_size;
 		    buffer_state->position = pos;
 		    result = pos;
 		    break;
 	    case SEEK_CUR:
+		    /* FIXME: Handle role over */
+		    buffer_state->position = buffer_state->position + pos;
+		    if (buffer_state->position < 0) buffer_state->position = 0;
+		    if (buffer_state->position > buffer_state->buffer_size) buffer_state->position = buffer_state->buffer_size;
 		    result = buffer_state->position;
 		    break;
 	    case SEEK_END:
-		    buffer_state->position = buffer_state->buffer_size;
+		    /* FIXME: Handle role over */
+		    buffer_state->position = buffer_state->buffer_size + pos;
+		    if (buffer_state->position < 0) buffer_state->position = 0;
+		    if (buffer_state->position > buffer_state->buffer_size) buffer_state->position = buffer_state->buffer_size;
 		    result = buffer_state->position;
 		    break;
 	    default:
+		    result = -EINVAL;
 		    break;
     }
     return result;
