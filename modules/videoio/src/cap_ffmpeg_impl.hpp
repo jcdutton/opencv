@@ -1872,11 +1872,11 @@ bool CvCapture_FFMPEG::setProperty( int property_id, double value )
 {
     if( !video_st ) return false;
 
-    std::cout << "FFMPEG::setProperty " << property_id << " value:" << value << "\n";
+    //std::cout << "FFMPEG::setProperty " << property_id << " value:" << value << "\n";
     switch( property_id )
     {
     case CAP_PROP_FRAME_FORMAT:
-        std::cout << "Frame Format set to " << value << "\n";
+        //std::cout << "Frame Format set to " << value << "\n";
         frame_format = value;
         break;
     case CAP_PROP_POS_MSEC:
