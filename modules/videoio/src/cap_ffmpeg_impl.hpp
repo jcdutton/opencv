@@ -615,6 +615,22 @@ void CvCapture_FFMPEG::close()
 
     if( ic )
     {
+        if (ic->pb)
+        {
+            if (ic->pb->buffer)
+            {
+                av_free(ic->pb->buffer);
+                ic->pb->buffer = NULL;
+                ic->pb->buffer_size = 0;
+            }
+            if (ic->pb->opaque)
+            {
+                free(ic->pb->opaque);
+                ic->pb->opaque = NULL;
+            }
+            avio_context_free(&(ic->pb));
+            ic->pb = NULL;
+        }
 #if LIBAVFORMAT_BUILD < CALC_FFMPEG_VERSION(53, 24, 2)
         av_close_input_file(ic);
 #else
@@ -1053,8 +1069,6 @@ static int read_buffer(void *opaque, uint8_t *buf, int buf_size)
 	buf_size_to_read = buffer_state->buffer_size - buffer_state->position; 
 	CV_LOG_DEBUG(NULL,  cv::format("read past end of buffer: pos:%ld + len:%d sum:%ld > buffer_size:%ld buf_size_to_read:%d",
 			buffer_state->position, buf_size, buffer_state->position + buf_size, buffer_state->buffer_size, buf_size_to_read));
-
-	//raise(SIGTRAP);
     }
     memcpy(buf, &(buffer_state->buffer[buffer_state->position]), buf_size_to_read);
     buffer_state->position += buf_size_to_read;
@@ -1121,17 +1135,18 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
 #endif
 
     // Create internal Buffer for FFmpeg:
-    const int av_BufSize = 128 * 1024;
-    unsigned char* av_buffer = new unsigned char[av_BufSize];
-    struct buffer_state_s *buffer_state = new struct buffer_state_s[1];
+    //const int av_BufSize = 128 * 1024;
+    //unsigned char* av_buffer = new unsigned char[av_BufSize];
+    struct buffer_state_s *buffer_state = (struct buffer_state_s*)malloc(sizeof(struct buffer_state_s));
     buffer_state->buffer = pBuffer; 
     buffer_state->buffer_size = bufLen; 
     buffer_state->position = 0;
 
-    ic->pb = avio_alloc_context(av_buffer, av_BufSize, 0, buffer_state, read_buffer, NULL, seek_buffer);
+    //ic->pb = avio_alloc_context(av_buffer, av_BufSize, 0, buffer_state, read_buffer, NULL, seek_buffer);
+    ic->pb = avio_alloc_context(NULL, 0, 0, buffer_state, read_buffer, NULL, seek_buffer);
     CV_LOG_DEBUG(NULL, "avio_alloc_context done");
     CV_LOG_DEBUG(NULL, cv::format("pBuffer: %p bufLen: %lu", pBuffer, bufLen));
-    CV_LOG_DEBUG(NULL, cv::format("av_buffer: %p av_BufSize: %d", av_buffer, av_BufSize));
+    //CV_LOG_DEBUG(NULL, cv::format("av_buffer: %p av_BufSize: %d", av_buffer, av_BufSize));
 
     if(!ic->pb) {
         // handle error
@@ -2879,8 +2894,7 @@ CvCapture_FFMPEG* cvCreateFileCapture_FFMPEG( const char* filename )
 
 CvCapture_FFMPEG* cvCreateBufferCapture_FFMPEG( unsigned char* pBuffer, unsigned long bufLen )
 {
-    CV_LOG_DEBUG(NULL, "cvCreateBufferCapture_FFMPEG called FIXME");
-    	CvCapture_FFMPEG* capture = (CvCapture_FFMPEG*)malloc(sizeof(*capture));
+    CvCapture_FFMPEG* capture = (CvCapture_FFMPEG*)malloc(sizeof(*capture));
     if (!capture)
         return 0;
     capture->init();
