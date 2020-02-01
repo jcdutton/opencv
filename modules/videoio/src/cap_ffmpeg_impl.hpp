@@ -615,7 +615,7 @@ void CvCapture_FFMPEG::close()
 
     if( ic )
     {
-        if (ic->pb)
+        if ((ic->pb) && (ic->flags == AVFMT_FLAG_CUSTOM_IO))
         {
             if (ic->pb->buffer)
             {
