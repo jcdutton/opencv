@@ -240,7 +240,7 @@ public:
 
     Ptr<IVideoCapture> createCapture(int camera) const CV_OVERRIDE;
     Ptr<IVideoCapture> createCapture(const std::string &filename) const CV_OVERRIDE;
-    Ptr<IVideoCapture> createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen) const CV_OVERRIDE;
+    Ptr<IVideoCapture> createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type) const CV_OVERRIDE;
     Ptr<IVideoWriter>  createWriter(const std::string &filename, int fourcc, double fps, const cv::Size &sz, bool isColor) const CV_OVERRIDE;
 };
 
@@ -594,7 +594,7 @@ Ptr<IVideoCapture> PluginBackend::createCapture(const std::string &filename) con
 }
 
 #if 1
-Ptr<IVideoCapture> PluginBackend::createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen) const
+Ptr<IVideoCapture> PluginBackend::createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type) const
 {
         CV_LOG_DEBUG(NULL, "PluginBackend::createCaptureBuffer called FIXME");
 #if 0

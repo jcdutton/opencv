@@ -36,11 +36,11 @@ public:
         return Ptr<IVideoCapture>();
     }
 #if 1
-    Ptr<IVideoCapture> createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen) const CV_OVERRIDE
+    Ptr<IVideoCapture> createCaptureBuffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type) const CV_OVERRIDE
     {
 	CV_LOG_DEBUG(NULL, "StaticBackend:createCaptureBuffer called");
 	if (fn_createCaptureBuffer_) {
-            return fn_createCaptureBuffer_(pBuffer, bufLen);
+            return fn_createCaptureBuffer_(pBuffer, bufLen, filename1, mime_type);
 	} else {
 		CV_LOG_DEBUG(NULL, "StaticBackend:createCaptureBuffer fn_createCaptureBuffer_ is NULL");
 	}

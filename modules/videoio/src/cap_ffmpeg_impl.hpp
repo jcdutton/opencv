@@ -481,7 +481,7 @@ static AVRational _opencv_ffmpeg_get_sample_aspect_ratio(AVStream *stream)
 struct CvCapture_FFMPEG
 {
     bool open(const char* filename);
-    bool open_buffer(unsigned char* pBuffer, unsigned long bufLen);
+    bool open_buffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type);
     void close();
 
     double getProperty(int) const;
@@ -974,6 +974,7 @@ bool CvCapture_FFMPEG::open( const char* _filename )
         CV_WARN("Could not find codec parameters");
         goto exit_func;
     }
+    CV_LOG_DEBUG(NULL, cv::format("AVInputFormat: %s : %s", ic->iformat->name, ic->iformat->long_name));
     for(i = 0; i < ic->nb_streams; i++)
     {
 #if LIBAVFORMAT_BUILD > 4628
@@ -1114,7 +1115,7 @@ static int64_t seek_buffer(void* opaque, int64_t pos, int whence)
 }
 
 
-bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
+bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type)
 {
     InternalFFMpegRegister::init();
     AutoLock lock(_mutex);
@@ -1156,7 +1157,14 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
     ic->iformat = NULL;
     ic->flags = AVFMT_FLAG_CUSTOM_IO; // Keeps close() happy
     CV_LOG_DEBUG(NULL, cv::format("ic->format_probesize: %d", ic->format_probesize));
-    err = av_probe_input_buffer2(ic->pb, &ic->iformat, NULL, ic, 0, ic->format_probesize);
+    //err = av_probe_input_buffer2(ic->pb, &ic->iformat, NULL, ic, 0, ic->format_probesize);
+    //  probesize == 0 means use the default max
+    err = av_probe_input_buffer2(ic->pb, &ic->iformat, filename1, ic, 0, 0);
+    if(err < 0) {
+        // Error Handling
+        CV_LOG_ERROR(NULL, cv::format("av_probe_input_buffer2 failed err:%d", err));
+        goto exit_func_ob;
+    }
     CV_LOG_DEBUG(NULL, cv::format("AVInputFormat: %s : %s", ic->iformat->name, ic->iformat->long_name));
     err = avformat_open_input(&ic, "", 0, 0);
     if(err < 0) {
@@ -2892,13 +2900,13 @@ CvCapture_FFMPEG* cvCreateFileCapture_FFMPEG( const char* filename )
     return 0;
 }
 
-CvCapture_FFMPEG* cvCreateBufferCapture_FFMPEG( unsigned char* pBuffer, unsigned long bufLen )
+CvCapture_FFMPEG* cvCreateBufferCapture_FFMPEG( unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type)
 {
     CvCapture_FFMPEG* capture = (CvCapture_FFMPEG*)malloc(sizeof(*capture));
     if (!capture)
         return 0;
     capture->init();
-    if( capture->open_buffer( pBuffer, bufLen ))
+    if( capture->open_buffer( pBuffer, bufLen, filename1, mime_type ))
         return capture;
 
     capture->close();

@@ -670,7 +670,7 @@ public:
     The method first calls VideoCapture::release to close the already opened file or camera.
     */
     CV_WRAP virtual bool open(int index, int apiPreference = CAP_ANY);
-    CV_WRAP virtual bool open_buffer(unsigned char* pBuffer, unsigned long bufLen);
+    CV_WRAP virtual bool open_buffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type);
 
     /** @brief Returns true if video capturing has been initialized already.
 

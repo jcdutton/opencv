@@ -69,7 +69,7 @@ class CvCapture_FFMPEG_proxy CV_FINAL : public cv::IVideoCapture
 public:
     CvCapture_FFMPEG_proxy() { ffmpegCapture = 0; }
     CvCapture_FFMPEG_proxy(const cv::String& filename) { ffmpegCapture = 0; open(filename); }
-    CvCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen) { ffmpegCapture = 0; open(pBuffer, bufLen); }
+    CvCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type) { ffmpegCapture = 0; open(pBuffer, bufLen, filename1, mime_type); }
     virtual ~CvCapture_FFMPEG_proxy() { close(); }
 
     virtual double getProperty(int propId) const CV_OVERRIDE
@@ -102,11 +102,11 @@ public:
         ffmpegCapture = icvCreateFileCapture_FFMPEG_p( filename.c_str() );
         return ffmpegCapture != 0;
     }
-    virtual bool open( unsigned char* pBuffer, unsigned long bufLen )
+    virtual bool open( unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type)
     {
         close();
 
-        ffmpegCapture = icvCreateBufferCapture_FFMPEG_p( pBuffer, bufLen );
+        ffmpegCapture = icvCreateBufferCapture_FFMPEG_p( pBuffer, bufLen, filename1, mime_type );
         return ffmpegCapture != 0;
     }
     virtual void close()
@@ -134,10 +134,10 @@ cv::Ptr<cv::IVideoCapture> cvCreateFileCapture_FFMPEG_proxy(const std::string &f
     return cv::Ptr<cv::IVideoCapture>();
 }
 
-cv::Ptr<cv::IVideoCapture> cvCreateBufferCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen)
+cv::Ptr<cv::IVideoCapture> cvCreateBufferCapture_FFMPEG_proxy(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type)
 {
     CV_LOG_DEBUG(NULL, "cvCreateBufferCapture_FFMPEG_proxy called");
-    cv::Ptr<CvCapture_FFMPEG_proxy> capture = cv::makePtr<CvCapture_FFMPEG_proxy>(pBuffer, bufLen);
+    cv::Ptr<CvCapture_FFMPEG_proxy> capture = cv::makePtr<CvCapture_FFMPEG_proxy>(pBuffer, bufLen, filename1, mime_type);
     if (capture && capture->isOpened())
         return capture;
     return cv::Ptr<cv::IVideoCapture>();

@@ -136,7 +136,7 @@ bool VideoCapture::open(const String& filename, int apiPreference)
     return false;
 }
 
-bool VideoCapture::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
+bool VideoCapture::open_buffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type)
 {
     CV_TRACE_FUNCTION();
     CV_LOG_DEBUG(NULL, "VideoCapture::open_buffer() called");
@@ -155,7 +155,7 @@ bool VideoCapture::open_buffer(unsigned char* pBuffer, unsigned long bufLen)
             const Ptr<IBackend> backend = info.backendFactory->getBackend();
             if (!backend.empty()) {
                 CV_LOG_DEBUG(NULL, cv::format("VIDEOIO(%s): TODO backend is OK", info.name));
-                icap = backend->createCaptureBuffer(pBuffer, bufLen);
+                icap = backend->createCaptureBuffer(pBuffer, bufLen, filename1, mime_type);
             } else {
                 CV_LOG_WARNING(NULL, cv::format("VIDEOIO(%s): backend is not available (plugin is missing, or can't be loaded due dependencies or it is not compatible)", info.name));
             }
