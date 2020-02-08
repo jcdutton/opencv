@@ -920,6 +920,7 @@ bool CvCapture_FFMPEG::open( const char* _filename )
 #if USE_AV_INTERRUPT_CALLBACK
     /* interrupt callback */
     interrupt_metadata.timeout_after_ms = LIBAVFORMAT_INTERRUPT_OPEN_TIMEOUT_MS;
+    interrupt_metadata.timeout = 0;
     get_monotonic_time(&interrupt_metadata.value);
 
     ic = avformat_alloc_context();
@@ -1043,6 +1044,7 @@ exit_func:
 #if USE_AV_INTERRUPT_CALLBACK
     // deactivate interrupt callback
     interrupt_metadata.timeout_after_ms = 0;
+    interrupt_metadata.timeout = 0;
 #endif
 
     if( !valid )
@@ -1052,7 +1054,7 @@ exit_func:
 }
 
 struct buffer_state_s {
-	unsigned char *buffer;
+	char *buffer;
 	long buffer_size;
 	long position;
 };
@@ -1115,26 +1117,26 @@ static int64_t seek_buffer(void* opaque, int64_t pos, int whence)
 }
 
 
-bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen, const char* filename1, char* mime_type)
+bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer1, unsigned long bufLen, const char* filename1, char* mime_type)
 {
     InternalFFMpegRegister::init();
     AutoLock lock(_mutex);
     unsigned i;
     int err = 0;
     bool valid = false;
+    char* pBuffer = (char*)pBuffer1;
     //char *_filename = "none";
-    CV_LOG_DEBUG(NULL, "open_buffer: called");
     close();
     ic = avformat_alloc_context();
 #if USE_AV_INTERRUPT_CALLBACK
     /* interrupt callback */
     interrupt_metadata.timeout_after_ms = LIBAVFORMAT_INTERRUPT_OPEN_TIMEOUT_MS;
+    interrupt_metadata.timeout = 0;
     get_monotonic_time(&interrupt_metadata.value);
 
     ic->interrupt_callback.callback = _opencv_ffmpeg_interrupt_callback;
     ic->interrupt_callback.opaque = &interrupt_metadata;
 #endif
-
     // Create internal Buffer for FFmpeg:
     //const int av_BufSize = 128 * 1024;
     //unsigned char* av_buffer = new unsigned char[av_BufSize];
@@ -1145,9 +1147,6 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen,
 
     //ic->pb = avio_alloc_context(av_buffer, av_BufSize, 0, buffer_state, read_buffer, NULL, seek_buffer);
     ic->pb = avio_alloc_context(NULL, 0, 0, buffer_state, read_buffer, NULL, seek_buffer);
-    CV_LOG_DEBUG(NULL, "avio_alloc_context done");
-    CV_LOG_DEBUG(NULL, cv::format("pBuffer: %p bufLen: %lu", pBuffer, bufLen));
-    //CV_LOG_DEBUG(NULL, cv::format("av_buffer: %p av_BufSize: %d", av_buffer, av_BufSize));
 
     if(!ic->pb) {
         // handle error
@@ -1156,30 +1155,20 @@ bool CvCapture_FFMPEG::open_buffer(unsigned char* pBuffer, unsigned long bufLen,
     }
     ic->iformat = NULL;
     ic->flags = AVFMT_FLAG_CUSTOM_IO; // Keeps close() happy
-    CV_LOG_DEBUG(NULL, cv::format("ic->format_probesize: %d", ic->format_probesize));
+    //CV_LOG_DEBUG(NULL, cv::format("ic->format_probesize: %d", ic->format_probesize));
     //err = av_probe_input_buffer2(ic->pb, &ic->iformat, NULL, ic, 0, ic->format_probesize);
     //  probesize == 0 means use the default max
-    err = av_probe_input_buffer2(ic->pb, &ic->iformat, filename1, ic, 0, 0);
-    if(err < 0) {
-        // Error Handling
-        CV_LOG_ERROR(NULL, cv::format("av_probe_input_buffer2 failed err:%d", err));
-        goto exit_func_ob;
-    }
-    CV_LOG_DEBUG(NULL, cv::format("AVInputFormat: %s : %s", ic->iformat->name, ic->iformat->long_name));
-    err = avformat_open_input(&ic, "", 0, 0);
+    //err = av_probe_input_buffer2(ic->pb, &ic->iformat, filename1, ic, 0, 0);
+    //if(err < 0) {
+    //    // Error Handling
+    //    CV_LOG_ERROR(NULL, cv::format("av_probe_input_buffer2 failed err:%d", err));
+    //    goto exit_func_ob;
+    //}
+    //CV_LOG_DEBUG(NULL, cv::format("AVInputFormat: %s : %s", ic->iformat->name, ic->iformat->long_name));
+    err = avformat_open_input(&ic, NULL, NULL, NULL);
     if(err < 0) {
         // Error Handling
         CV_LOG_ERROR(NULL, cv::format("avformat_open_input failed err:%d", err));
-        goto exit_func_ob;
-    }
-#if LIBAVFORMAT_BUILD >= CALC_FFMPEG_VERSION(53, 6, 0)
-    err = avformat_find_stream_info(ic, NULL);
-#else
-    err = av_find_stream_info(ic);
-#endif
-    if (err < 0)
-    {
-        CV_LOG_WARNING(NULL, "Could not find codec parameters");
         goto exit_func_ob;
     }
     for(i = 0; i < ic->nb_streams; i++)
@@ -1250,6 +1239,7 @@ exit_func_ob:
 #if USE_AV_INTERRUPT_CALLBACK
     // deactivate interrupt callback
     interrupt_metadata.timeout_after_ms = 0;
+    interrupt_metadata.timeout = 0;
 #endif
 
     if( !valid )
@@ -1396,6 +1386,7 @@ bool CvCapture_FFMPEG::grabFrame()
     // activate interrupt callback
     get_monotonic_time(&interrupt_metadata.value);
     interrupt_metadata.timeout_after_ms = LIBAVFORMAT_INTERRUPT_READ_TIMEOUT_MS;
+    interrupt_metadata.timeout = 0;
 #endif
 
     // get the next frame
@@ -1405,9 +1396,10 @@ bool CvCapture_FFMPEG::grabFrame()
         _opencv_ffmpeg_av_packet_unref (&packet);
 
 #if USE_AV_INTERRUPT_CALLBACK
-        if (interrupt_metadata.timeout)
+        if (interrupt_metadata.timeout_after_ms && interrupt_metadata.timeout)
         {
             valid = false;
+            CV_LOG_DEBUG(NULL, cv::format("grabFrame: interrupt_metadata.timeout"));
             break;
         }
 #endif
@@ -1471,6 +1463,7 @@ bool CvCapture_FFMPEG::grabFrame()
 #if USE_AV_INTERRUPT_CALLBACK
     // deactivate interrupt callback
     interrupt_metadata.timeout_after_ms = 0;
+    interrupt_metadata.timeout = 0;
 #endif
 
     // return if we have a new frame or not
